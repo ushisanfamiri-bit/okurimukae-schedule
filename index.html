@@ -9,6 +9,7 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <title>送り迎え当番表</title>
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🏠</text></svg>">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.5.0/lz-string.min.js"></script>
     <style>
         :root {
             --color-papa: #4A90D9;
@@ -1683,13 +1684,20 @@
                 w: formatDateFull(weekMonday),
                 s: schedule
             };
-            return btoa(unescape(encodeURIComponent(JSON.stringify(data))));
+            // LZStringを使用してURLセーフかつ短縮された文字列を生成
+            return LZString.compressToEncodedURIComponent(JSON.stringify(data));
         }
 
         function decodeScheduleFromHash(hash) {
             try {
-                const jsonStr = decodeURIComponent(escape(atob(hash)));
-                return JSON.parse(jsonStr);
+                // まずLZStringで展開を試みる（新方式）
+                const jsonStr = LZString.decompressFromEncodedURIComponent(hash);
+                if (jsonStr) {
+                    return JSON.parse(jsonStr);
+                }
+                // 下位互換性のため、従来のBase64方式でもパースを試みる
+                const oldJsonStr = decodeURIComponent(escape(atob(hash)));
+                return JSON.parse(oldJsonStr);
             } catch (e) {
                 return null;
             }
@@ -2171,7 +2179,7 @@
             
             const hash = encodeScheduleToHash(currentWeekMonday, schedule);
             const importUrl = window.location.href.split('#')[0] + '#' + hash;
-            text += `\n🔗 スケジュールをアプリに取り込む:\n${importUrl}`;
+            text += `\n🔗 以下のURLをタップしてアプリに予定を追加:\n${importUrl}\n`;
             
             return text;
         }
