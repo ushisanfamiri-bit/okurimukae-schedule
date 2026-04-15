@@ -667,31 +667,51 @@
 
         /* ===== Unusual Assignment Alert ===== */
         .is-unusual {
-            border: 2px solid #FF5A36 !important;
-            box-shadow: 0 0 8px rgba(255, 90, 54, 0.4) !important;
-            animation: pulse-border 2s infinite;
+            border: 3px solid #ff1744 !important;
+            background: repeating-linear-gradient(
+                -45deg,
+                #fff8f8,
+                #fff8f8 10px,
+                #ffebee 10px,
+                #ffebee 20px
+            ) !important;
+            box-shadow: 0 4px 12px rgba(255, 23, 68, 0.4) !important;
+        }
+
+        .is-unusual.today-member-badge,
+        .is-unusual.flow-step-member {
+            background: #ff1744 !important;
+            color: #ffffff !important;
         }
         
-        @keyframes pulse-border {
-            0% { box-shadow: 0 0 0 0 rgba(255, 90, 54, 0.4); }
-            70% { box-shadow: 0 0 0 6px rgba(255, 90, 54, 0); }
-            100% { box-shadow: 0 0 0 0 rgba(255, 90, 54, 0); }
+        .is-unusual.duty-cell .duty-member {
+            background: #ff1744 !important;
+            color: #ffffff !important;
+            padding: 0 6px;
+            border-radius: 4px;
         }
 
         .is-unusual.duty-cell .duty-member::after,
         .is-unusual.today-flow-member::after,
         .is-unusual.flow-step-member::after,
         .is-unusual.today-member-badge::after {
-            content: '⚠️';
-            font-size: 14px;
-            margin-left: 2px;
-            animation: bounce 1s infinite alternate;
+            content: '🚨 いつもと違う!';
+            font-size: 11px;
+            color: #d50000;
+            background: #ffffff;
+            border: 1px solid #d50000;
+            padding: 2px 4px;
+            border-radius: 10px;
+            margin-left: 6px;
+            font-weight: 900;
+            animation: alert-flash 1.5s infinite;
             display: inline-block;
+            white-space: nowrap;
         }
 
-        @keyframes bounce {
-            from { transform: translateY(0); }
-            to { transform: translateY(-3px); }
+        @keyframes alert-flash {
+            0%, 100% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.05); opacity: 0.8; box-shadow: 0 0 5px rgba(213,0,0,0.5); }
         }
 
         /* ===== Memo Section ===== */
