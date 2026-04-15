@@ -665,6 +665,35 @@
         .badge-baba { background: var(--color-baba); color: white; }
         .badge-none { background: var(--color-none-bg); color: var(--color-none); }
 
+        /* ===== Unusual Assignment Alert ===== */
+        .is-unusual {
+            border: 2px solid #FF5A36 !important;
+            box-shadow: 0 0 8px rgba(255, 90, 54, 0.4) !important;
+            animation: pulse-border 2s infinite;
+        }
+        
+        @keyframes pulse-border {
+            0% { box-shadow: 0 0 0 0 rgba(255, 90, 54, 0.4); }
+            70% { box-shadow: 0 0 0 6px rgba(255, 90, 54, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(255, 90, 54, 0); }
+        }
+
+        .is-unusual.duty-cell .duty-member::after,
+        .is-unusual.today-flow-member::after,
+        .is-unusual.flow-step-member::after,
+        .is-unusual.today-member-badge::after {
+            content: '⚠️';
+            font-size: 14px;
+            margin-left: 2px;
+            animation: bounce 1s infinite alternate;
+            display: inline-block;
+        }
+
+        @keyframes bounce {
+            from { transform: translateY(0); }
+            to { transform: translateY(-3px); }
+        }
+
         /* ===== Memo Section ===== */
         .memo-section {
             margin: 16px 16px 12px;
@@ -1458,6 +1487,24 @@
         // ===== Preset Patterns =====
         const PATTERNS = [
             {
+                title: '⭐ 基本パターン',
+                desc: 'そうすけ(送迎:じーじ)、まな(送り:ママ、迎え:じーじ)',
+                emoji: '⭐',
+                generate: () => {
+                    const s = {};
+                    for (let dow = 1; dow <= 5; dow++) {
+                        CHILDREN.forEach(c => {
+                            s[`${dow}_${c.id}_send`] = c.id === 'sosuke' ? 'jiji' : 'mama';
+                            s[`${dow}_${c.id}_pick`] = 'jiji';
+                        });
+                    }
+                    FRIDAY_FLOW.forEach(step => {
+                        s[`flow_${step.id}`] = step.defaultMember;
+                    });
+                    return s;
+                }
+            },
+            {
                 title: '👨 パパ平日メイン',
                 desc: '平日の送りはパパ、迎えはママ。土曜はおやすみ。',
                 emoji: '👨',
@@ -1678,6 +1725,23 @@
             schedule[key] = time;
         }
 
+        // ===== Unusual Assignment Logic =====
+        function isUnusualAssignment(childId, actionId, memberId) {
+            if (memberId === 'none') return true;
+            let defaultMember = '';
+            if (childId === 'sosuke' && actionId === 'send') defaultMember = 'jiji';
+            if (childId === 'sosuke' && actionId === 'pick') defaultMember = 'jiji';
+            if (childId === 'mana' && actionId === 'send') defaultMember = 'mama';
+            if (childId === 'mana' && actionId === 'pick') defaultMember = 'jiji';
+            return memberId !== defaultMember;
+        }
+
+        function isUnusualFlowAssignment(stepId, memberId) {
+            if (memberId === 'none') return true;
+            const step = FRIDAY_FLOW.find(s => s.id === stepId);
+            return step && step.defaultMember !== memberId;
+        }
+
         // ===== URL Hash Sharing =====
         function encodeScheduleToHash(weekMonday, schedule) {
             const data = {
@@ -1789,9 +1853,10 @@
                     const member = MEMBERS[memberId];
                     const time = getTime(schedule, todayDow, child.id, action.id);
                     const timeHtml = time ? `<span class="today-time">🕐 ${time}</span>` : '';
+                    const unusualClass = isUnusualAssignment(child.id, action.id, memberId) ? 'is-unusual' : '';
                     html += `<div class="today-duty-row">
                         <span class="today-action-label">${action.emoji} ${action.name}</span>
-                        <div class="today-member-badge badge-${member.color}">
+                        <div class="today-member-badge badge-${member.color} ${unusualClass}">
                             ${member.emoji} ${member.name}
                         </div>
                         ${timeHtml}
@@ -1810,11 +1875,12 @@
                     const memberId = getFlowAssignment(schedule, step.id);
                     const member = MEMBERS[memberId];
                     const timeHtml = step.time ? `<span class="today-time">🕐 ${step.time}</span>` : '';
+                    const unusualClass = isUnusualFlowAssignment(step.id, memberId) ? 'is-unusual' : '';
                     html += `<div class="today-flow-step">
                         <div class="today-flow-num">${i + 1}</div>
                         <span class="today-flow-label">${step.emoji} ${step.label}</span>
                         ${timeHtml}
-                        <div class="today-flow-member badge-${member.color}">
+                        <div class="today-flow-member badge-${member.color} ${unusualClass}">
                             ${member.emoji} ${member.name}
                         </div>
                     </div>`;
@@ -1896,8 +1962,9 @@
                         const editable = editMode ? 'editable' : '';
                         const onclick = editMode ? `onclick="openMemberModal(${dow}, '${child.id}', '${action.id}')"` : '';
                         const timeHtml = time ? `<span class="duty-time">🕐 ${time}</span>` : '';
+                        const unusualClass = isUnusualAssignment(child.id, action.id, memberId) ? 'is-unusual' : '';
 
-                        html += `<div class="duty-cell member-${member.color} ${editable}" ${onclick}>
+                        html += `<div class="duty-cell member-${member.color} ${editable} ${unusualClass}" ${onclick}>
                             <div class="duty-cell-row">
                                 <span class="duty-action">${action.name}</span>
                                 <span class="duty-member">${member.emoji} ${member.name}</span>
@@ -1921,6 +1988,7 @@
                         const editable = editMode ? 'editable' : '';
                         const onclick = editMode ? `onclick="openFlowModal('${step.id}')"` : '';
                         const timeHtml = step.time ? `<span class="duty-time" style="margin-top:4px;">🕐 ${step.time}</span>` : '';
+                        const unusualClass = isUnusualFlowAssignment(step.id, memberId) ? 'is-unusual' : '';
 
                         if (i > 0) html += `<div class="flow-connector"></div>`;
                         html += `<div class="flow-step ${editable}" ${onclick}>
@@ -1930,7 +1998,7 @@
                                 <div class="flow-step-desc">${step.desc}</div>
                                 ${timeHtml}
                             </div>
-                            <div class="flow-step-member member-${member.color}">
+                            <div class="flow-step-member member-${member.color} ${unusualClass}">
                                 ${member.emoji} ${member.name}
                             </div>
                         </div>`;
