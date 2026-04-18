@@ -1693,6 +1693,7 @@
         function saveSchedule(weekMonday, schedule) {
             const key = getStorageKey(weekMonday);
             localStorage.setItem(key, JSON.stringify(schedule));
+            syncToCloud();
         }
 
         function loadMemo(weekMonday) {
@@ -1705,6 +1706,64 @@
             const key = getMemoKey(currentWeekMonday);
             const text = document.getElementById('memoTextarea').value;
             localStorage.setItem(key, text);
+            syncToCloud();
+        }
+
+        // ===== Cloud Sync (KVDB) =====
+        const KVDB_BUCKET_ID = "Hv3CmR2ypG2i3G1BzNR9YS";
+        const KVDB_URL = `https://kvdb.io/${KVDB_BUCKET_ID}`;
+        let lastSyncDataStr = "";
+        let syncTimeout = null;
+        let isSyncing = false;
+
+        function syncToCloud() {
+            if (syncTimeout) clearTimeout(syncTimeout);
+            syncTimeout = setTimeout(async () => {
+                let uploadData = {};
+                for (let i = 0; i < localStorage.length; i++) {
+                    const key = localStorage.key(i);
+                    if (key.startsWith('schedule_') || key.startsWith('memo_')) {
+                        uploadData[key] = localStorage.getItem(key);
+                    }
+                }
+                try {
+                    const dataStr = JSON.stringify(uploadData);
+                    lastSyncDataStr = dataStr;
+                    showToast('☁️ 保存中...');
+                    await fetch(`${KVDB_URL}/app_state`, {
+                        method: 'POST',
+                        body: dataStr,
+                    });
+                } catch (e) {
+                    console.error("Cloud sync failed", e);
+                }
+            }, 1000);
+        }
+
+        async function syncFromCloud() {
+            if (isSyncing) return;
+            isSyncing = true;
+            try {
+                const response = await fetch(`${KVDB_URL}/app_state`);
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data) {
+                        const dataStr = JSON.stringify(data);
+                        if (dataStr !== lastSyncDataStr) {
+                            lastSyncDataStr = dataStr;
+                            for (const key in data) {
+                                localStorage.setItem(key, data[key]);
+                            }
+                            render(); // Refresh UI with new data
+                            showToast('🔄 最新の予定(クラウド)に更新しました');
+                        }
+                    }
+                }
+            } catch (e) {
+                console.error("Cloud fetch failed", e);
+            } finally {
+                isSyncing = false;
+            }
         }
 
         function getAssignment(schedule, dayIndex, childId, actionId) {
@@ -2265,9 +2324,8 @@
 
             text += `\n─────────────`;
             
-            const hash = encodeScheduleToHash(currentWeekMonday, schedule);
-            const importUrl = window.location.href.split('#')[0] + '#' + hash;
-            text += `\n🔗 以下のURLをタップしてアプリに予定を追加:\n${importUrl}\n`;
+            const importUrl = window.location.href.split('#')[0];
+            text += `\n🔗 アプリを開く:\n${importUrl}\n`;
             
             return text;
         }
@@ -2388,8 +2446,15 @@
         });
 
         // ===== Init =====
-        checkUrlHash();
-        render();
+        async function initApp() {
+            checkUrlHash(); // If someone has an old URL with hash, load it first
+            render();       // Render local immediately
+            await syncFromCloud(); // Fetch cloud data
+            // Poll for changes every 5 seconds
+            setInterval(syncFromCloud, 5000);
+        }
+
+        initApp();
     </script>
 </body>
 </html>
