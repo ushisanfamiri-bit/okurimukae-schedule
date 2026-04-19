@@ -1718,6 +1718,7 @@
         let isSyncing = false;
 
         function syncToCloud() {
+            if (!isAdmin) return; // 閲覧用URLからは絶対にクラウドを更新しない
             if (syncTimeout) clearTimeout(syncTimeout);
             syncTimeout = setTimeout(async () => {
                 let uploadData = {};
