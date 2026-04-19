@@ -2450,22 +2450,33 @@
         // ===== Init =====
         async function initApp() {
             if (!isAdmin) {
-                const editBtn = document.getElementById('editBtn');
-                if (editBtn) editBtn.style.display = 'none';
-                
+                // ===== 閲覧専用モード =====
+                // 下部のボタンバー（編集・共有）を完全に非表示
+                const bottomBar = document.querySelector('.bottom-bar');
+                if (bottomBar) bottomBar.style.display = 'none';
+
+                // 下部バーが消えた分のpadding除去
+                document.body.style.paddingBottom = '20px';
+
+                // ヘッダー内のクイックアクション（先週コピー・パターン設定）を非表示
+                const quickActions = document.querySelector('.quick-actions');
+                if (quickActions) quickActions.style.display = 'none';
+
+                // メモ欄を読み取り専用にする
                 const memoTextarea = document.getElementById('memoTextarea');
                 if (memoTextarea) {
                     memoTextarea.readOnly = true;
-                    memoTextarea.style.background = '#f9f9f9';
+                    memoTextarea.style.background = '#f5f5f5';
+                    memoTextarea.style.color = '#555';
                 }
             } else {
-                toggleEditMode(); // Admins start with edit mode ON
+                toggleEditMode(); // 管理者は最初から編集モードON
             }
 
-            checkUrlHash(); // If someone has an old URL with hash, load it first
-            render();       // Render local immediately
-            await syncFromCloud(); // Fetch cloud data
-            // Poll for changes every 5 seconds
+            checkUrlHash(); // 旧URLのハッシュデータがあれば読み込み
+            render();       // ローカルデータでまず表示
+            await syncFromCloud(); // クラウドから最新データを取得
+            // 5秒ごとにクラウドの更新をチェック
             setInterval(syncFromCloud, 5000);
         }
 
