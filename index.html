@@ -1620,6 +1620,7 @@
         // ===== State =====
         let currentWeekMonday = getMonday(new Date());
         let editMode = false;
+        const isAdmin = new URLSearchParams(window.location.search).get('edit') === '1';
         let editTarget = null;
         let confirmCallback = null;
 
@@ -2447,6 +2448,19 @@
 
         // ===== Init =====
         async function initApp() {
+            if (!isAdmin) {
+                const editBtn = document.getElementById('editBtn');
+                if (editBtn) editBtn.style.display = 'none';
+                
+                const memoTextarea = document.getElementById('memoTextarea');
+                if (memoTextarea) {
+                    memoTextarea.readOnly = true;
+                    memoTextarea.style.background = '#f9f9f9';
+                }
+            } else {
+                toggleEditMode(); // Admins start with edit mode ON
+            }
+
             checkUrlHash(); // If someone has an old URL with hash, load it first
             render();       // Render local immediately
             await syncFromCloud(); // Fetch cloud data
