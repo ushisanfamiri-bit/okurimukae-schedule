@@ -2326,7 +2326,7 @@
 
             text += `\n─────────────`;
             
-            const importUrl = window.location.href.split('#')[0];
+            const importUrl = window.location.href.split('?')[0].split('#')[0];
             text += `\n🔗 アプリを開く:\n${importUrl}\n`;
             
             return text;
