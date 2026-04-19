@@ -1678,32 +1678,44 @@
             return 'memo_' + formatDateFull(weekMonday);
         }
 
-        function loadSchedule(weekMonday) {
-            const key = getStorageKey(weekMonday);
-            const data = localStorage.getItem(key);
-            if (data) {
-                try {
-                    return JSON.parse(data);
-                } catch (e) {
-                    return {};
-                }
-            }
-            return {};
-        }
-
         function saveSchedule(weekMonday, schedule) {
             const key = getStorageKey(weekMonday);
-            localStorage.setItem(key, JSON.stringify(schedule));
-            syncToCloud();
+            if (isAdmin) {
+                localStorage.setItem(key, JSON.stringify(schedule));
+                syncToCloud();
+            }
+            // 閲覧者はlocalStorageに一切書き込まない
+        }
+
+        function loadSchedule(weekMonday) {
+            const key = getStorageKey(weekMonday);
+            if (!isAdmin && cloudDataCache) {
+                // 閲覧者はクラウドのデータだけを使う
+                const data = cloudDataCache[key];
+                if (data) {
+                    try { return JSON.parse(data); } catch(e) { return {}; }
+                }
+                return {};
+            }
+            // 管理者はlocalStorageから読む
+            const data = localStorage.getItem(key);
+            if (data) {
+                try { return JSON.parse(data); } catch(e) { return {}; }
+            }
+            return {};
         }
 
         function loadMemo(weekMonday) {
             const key = getMemoKey(weekMonday);
             const defaultMemo = '早くお迎えに行く場合は事前幼稚園。保育園共に連絡が必要なので当日の朝までに教えてください。\n';
+            if (!isAdmin && cloudDataCache) {
+                return cloudDataCache[key] || defaultMemo;
+            }
             return localStorage.getItem(key) || defaultMemo;
         }
 
         function saveMemo() {
+            if (!isAdmin) return; // 閲覧者はメモも保存しない
             const key = getMemoKey(currentWeekMonday);
             const text = document.getElementById('memoTextarea').value;
             localStorage.setItem(key, text);
@@ -1713,12 +1725,14 @@
         // ===== Cloud Sync (KVDB) =====
         const KVDB_BUCKET_ID = "Hv3CmR2ypG2i3G1BzNR9YS";
         const KVDB_URL = `https://kvdb.io/${KVDB_BUCKET_ID}`;
-        let lastSyncDataStr = "";
+        let cloudDataCache = null; // 閲覧者専用：クラウドから取得したデータ
+        let lastCloudHash = "";    // 変更検知用ハッシュ
         let syncTimeout = null;
         let isSyncing = false;
 
+        // 管理者専用：ローカルデータをクラウドにアップロード
         function syncToCloud() {
-            if (!isAdmin) return; // 閲覧用URLからは絶対にクラウドを更新しない
+            if (!isAdmin) return;
             if (syncTimeout) clearTimeout(syncTimeout);
             syncTimeout = setTimeout(async () => {
                 let uploadData = {};
@@ -1730,36 +1744,56 @@
                 }
                 try {
                     const dataStr = JSON.stringify(uploadData);
-                    lastSyncDataStr = dataStr;
-                    showToast('☁️ 保存中...');
-                    await fetch(`${KVDB_URL}/app_state`, {
-                        method: 'POST',
+                    lastCloudHash = dataStr;
+                    showToast('☁️ クラウドに保存中...');
+                    const resp = await fetch(`${KVDB_URL}/app_state`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
                         body: dataStr,
                     });
+                    if (resp.ok) {
+                        showToast('✅ クラウドに保存しました');
+                    }
                 } catch (e) {
                     console.error("Cloud sync failed", e);
+                    showToast('⚠️ クラウド保存に失敗しました');
                 }
-            }, 1000);
+            }, 800);
         }
 
+        // クラウドからデータを取得（管理者・閲覧者共通）
         async function syncFromCloud() {
             if (isSyncing) return;
             isSyncing = true;
             try {
-                const response = await fetch(`${KVDB_URL}/app_state`);
-                if (response.ok) {
-                    const data = await response.json();
-                    if (data) {
-                        const dataStr = JSON.stringify(data);
-                        if (dataStr !== lastSyncDataStr) {
-                            lastSyncDataStr = dataStr;
-                            for (const key in data) {
-                                localStorage.setItem(key, data[key]);
-                            }
-                            render(); // Refresh UI with new data
-                            showToast('🔄 最新の予定(クラウド)に更新しました');
+                const response = await fetch(`${KVDB_URL}/app_state`, {
+                    cache: 'no-store'
+                });
+                if (!response.ok) {
+                    isSyncing = false;
+                    return;
+                }
+                const text = await response.text();
+                if (!text || text.trim() === '' || text.trim() === '{}') {
+                    isSyncing = false;
+                    return;
+                }
+
+                // 変更があった場合のみ更新
+                if (text !== lastCloudHash) {
+                    lastCloudHash = text;
+                    const data = JSON.parse(text);
+
+                    if (isAdmin) {
+                        // 管理者：クラウドのデータでlocalStorageを更新
+                        for (const key in data) {
+                            localStorage.setItem(key, data[key]);
                         }
+                    } else {
+                        // 閲覧者：クラウドデータをメモリに保存（localStorageは使わない）
+                        cloudDataCache = data;
                     }
+                    render();
                 }
             } catch (e) {
                 console.error("Cloud fetch failed", e);
@@ -2451,6 +2485,16 @@
         async function initApp() {
             if (!isAdmin) {
                 // ===== 閲覧専用モード =====
+                // 古いlocalStorageデータを完全にクリア（誤表示防止）
+                const keysToRemove = [];
+                for (let i = 0; i < localStorage.length; i++) {
+                    const key = localStorage.key(i);
+                    if (key.startsWith('schedule_') || key.startsWith('memo_')) {
+                        keysToRemove.push(key);
+                    }
+                }
+                keysToRemove.forEach(k => localStorage.removeItem(k));
+
                 // 下部のボタンバー（編集・共有）を完全に非表示
                 const bottomBar = document.querySelector('.bottom-bar');
                 if (bottomBar) bottomBar.style.display = 'none';
@@ -2469,15 +2513,22 @@
                     memoTextarea.style.background = '#f5f5f5';
                     memoTextarea.style.color = '#555';
                 }
-            } else {
-                toggleEditMode(); // 管理者は最初から編集モードON
-            }
 
-            checkUrlHash(); // 旧URLのハッシュデータがあれば読み込み
-            render();       // ローカルデータでまず表示
-            await syncFromCloud(); // クラウドから最新データを取得
-            // 5秒ごとにクラウドの更新をチェック
-            setInterval(syncFromCloud, 5000);
+                // クラウドからデータを取得して表示（閲覧者はこれだけ）
+                showToast('📡 最新の予定を取得中...');
+                await syncFromCloud();
+                // 5秒ごとにクラウドの更新を自動チェック
+                setInterval(syncFromCloud, 5000);
+
+            } else {
+                // ===== 管理者モード =====
+                toggleEditMode(); // 管理者は最初から編集モードON
+                checkUrlHash();   // 旧URLのハッシュデータがあれば読み込み
+                render();         // ローカルデータでまず表示
+                await syncFromCloud(); // クラウドから最新データも取得
+                // 5秒ごとにクラウドの更新をチェック
+                setInterval(syncFromCloud, 5000);
+            }
         }
 
         initApp();
